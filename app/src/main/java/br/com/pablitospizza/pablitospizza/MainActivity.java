@@ -1,24 +1,33 @@
 package br.com.pablitospizza.pablitospizza;
 
+import android.annotation.SuppressLint;
+import android.content.ContentProviderOperation;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
-import android.net.Uri;
 import android.os.Bundle;
+import android.provider.ContactsContract;
 import android.support.v7.app.AppCompatActivity;
 import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.webkit.GeolocationPermissions;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 
+
+@SuppressLint("SetJavaScriptEnabled")
 public class MainActivity extends AppCompatActivity {
 
     private WebView mWebView;
@@ -33,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
+        @SuppressWarnings("deprecation")
         public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
 
             Toast toast = Toast.makeText(getBaseContext(),
@@ -76,6 +86,7 @@ public class MainActivity extends AppCompatActivity {
         mWebView.getSettings().setGeolocationEnabled(true);
         mWebView.getSettings().setAppCacheEnabled(true);
         mWebView.getSettings().setSaveFormData(true);
+        mWebView.addJavascriptInterface(new WebViewJavaScriptInterface(this), "app");
 
         mWebView.setWebChromeClient(new GeoWebChromeClient());
         if(haveNetworkConnection()){
@@ -110,10 +121,24 @@ public class MainActivity extends AppCompatActivity {
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_feedback) {
-            Intent intent = new Intent(Intent.ACTION_SENDTO, Uri.fromParts(
-                    "mailto", "email@email.com", null));
-            intent.putExtra(Intent.EXTRA_SUBJECT, "Teste");
-            startActivity(Intent.createChooser(intent, "Choose an Email client :"));
+            PackageManager pm=getPackageManager();
+            try {
+                Intent waIntent = new Intent(Intent.ACTION_SEND);
+                waIntent.setType("text/plain");
+                String text = "YOUR TEXT HERE";
+
+                PackageInfo info=pm.getPackageInfo("com.whatsapp", PackageManager.GET_META_DATA);
+                //Check if package exists or not. If not then code
+                //in catch block will be called
+                waIntent.setPackage("com.whatsapp");
+
+                waIntent.putExtra(Intent.EXTRA_TEXT, text);
+                startActivity(Intent.createChooser(waIntent, "Share with"));
+
+            } catch (PackageManager.NameNotFoundException e) {
+                Toast.makeText(this, "WhatsApp not Installed", Toast.LENGTH_SHORT)
+                        .show();
+            }
             return true;
         }
 
@@ -123,7 +148,7 @@ public class MainActivity extends AppCompatActivity {
 
         return super.onOptionsItemSelected(item);
     }
-
+    @SuppressWarnings("deprecation")
     private boolean haveNetworkConnection() {
         boolean haveConnectedWifi = false;
         boolean haveConnectedMobile = false;
@@ -140,5 +165,63 @@ public class MainActivity extends AppCompatActivity {
                     haveConnectedMobile = true;
         }
         return haveConnectedWifi || haveConnectedMobile;
+    }
+
+    /*
+     * JavaScript Interface. Web code can access methods in here
+     * (as long as they have the @JavascriptInterface annotation)
+     */
+    public class WebViewJavaScriptInterface{
+
+        private Context context;
+
+        public WebViewJavaScriptInterface(Context context){
+            this.context = context;
+        }
+
+        @JavascriptInterface
+        public void makeToast(String message, boolean lengthLong){
+            Toast.makeText(context, message, (lengthLong ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT)).show();
+        }
+
+        @JavascriptInterface
+        public void callWhatsapp(String message){
+
+        }
+    }
+
+    public static boolean insertContact(ContentResolver contactAdder,
+                                        String firstName, String mobileNumber) {
+        ArrayList<ContentProviderOperation> ops = new ArrayList<>();
+        ops.add(ContentProviderOperation
+                .newInsert(ContactsContract.RawContacts.CONTENT_URI)
+                .withValue(ContactsContract.RawContacts.ACCOUNT_TYPE, null)
+                .withValue(ContactsContract.RawContacts.ACCOUNT_NAME, null)
+                .build());
+        ops.add(ContentProviderOperation
+                .newInsert(ContactsContract.Data.CONTENT_URI)
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                .withValue(
+                        ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE)
+                .withValue(
+                        ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME,
+                        firstName).build());
+        ops.add(ContentProviderOperation
+                .newInsert(ContactsContract.Data.CONTENT_URI)
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                .withValue(
+                        ContactsContract.Data.MIMETYPE,
+                        ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE)
+                .withValue(ContactsContract.CommonDataKinds.Phone.NUMBER,
+                        mobileNumber)
+                .withValue(ContactsContract.CommonDataKinds.Phone.TYPE,
+                        ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE).build());
+        try {
+            contactAdder.applyBatch(ContactsContract.AUTHORITY, ops);
+        } catch (Exception e) {
+            return false;
+        }
+        return true;
     }
 }

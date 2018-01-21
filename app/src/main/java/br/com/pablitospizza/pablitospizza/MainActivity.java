@@ -90,7 +90,7 @@ public class MainActivity extends AppCompatActivity {
 
         mWebView.setWebChromeClient(new GeoWebChromeClient());
         if(haveNetworkConnection()){
-            mWebView.loadUrl("http://drupal.pauloduarte.tk/");
+            mWebView.loadUrl("http://www.pablitospizza.com.br/");
         } else {
             mWebView.loadUrl("file:///android_asset/custom.html");
         }
